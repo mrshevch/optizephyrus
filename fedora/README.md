@@ -180,6 +180,12 @@ For people who do not use GNOME Calendar or Contacts on this machine.
 - **supergfxctl:** without it, the RX 6700S already powers off fully (runtime PM, D3cold) when nothing uses it.
 - **Battery charge limit:** GNOME already handles it (*Settings → Power → Preserve Battery Health*).
 - **`sp5100_tco` hardware watchdog:** see section 8.
+- **initramfs without amdgpu:** amdgpu is 31 of 145 MB of the unpacked image (21 %). Too little to be worth a different boot path.
+- **GRUB timeout:** the menu is already hidden (`menu_auto_hide=1`). The rest of the 4.7 s loader time is reading the kernel and initramfs through UEFI.
+- **PCIe ASPM `powersupersave`:** the OS controls ASPM, and the BIOS already enables L1.1 and L1.2 on the Wi-Fi card and the NVMe drive. There is nothing left to gain.
+- **Runtime PM for the O2 Micro card reader:** the `sdhci-pci` driver leaves it off on purpose. Forcing it on can make the reader miss an inserted card.
+- **Services that never start on this hardware** (`thermald`, `intel_lpmd`, VM guest agents, iSCSI, `livesys`): their start conditions are not met, so disabling them saves nothing.
+- **TPM2 unlock for LUKS:** most of the initrd time is typing the passphrase, but TPM2 unlock is a security decision, not a speed tweak.
 
 ## What `gaming.sh` changes
 
@@ -304,6 +310,9 @@ iw dev wlp5s0 get power_save             # on on battery, off on AC
 rpm -q gnome-software                    # not installed (--lean)
 systemctl --global is-enabled localsearch-3.service   # masked (--lean)
 pgrep -l 'evolution|gnome-calendar'      # nothing (--no-calendar)
+
+# power draw on battery, idle, 60 s average
+for i in $(seq 60); do cat /sys/class/power_supply/BAT0/power_now; sleep 1; done | awk '{s+=$1} END {printf "%.2f W\n", s/NR/1e6}'
 sysctl vm.compaction_proactiveness       # 0 (gaming.sh)
 
 # while a game runs with gamemoderun:
