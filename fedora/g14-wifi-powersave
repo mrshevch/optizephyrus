@@ -6,8 +6,12 @@ PATH="$PATH:/usr/bin:/usr/sbin"   # udev запускает с урезанны�
 AC="${G14_AC_ONLINE:-/sys/class/power_supply/AC0/online}"
 NET="${G14_NET:-/sys/class/net}"
 
-ps=off   # нет AC0 или неизвестное значение — как от сети, то есть ничего не меняем по сравнению с прежним
-[[ "$(cat "$AC" 2>/dev/null)" == 0 ]] && ps=on
+# Нет AC0 или непонятное значение — питание неизвестно, power save не трогаем (ядро по умолчанию держит его включённым)
+case "$(cat "$AC" 2>/dev/null)" in
+  0) ps=on ;;
+  1) ps=off ;;
+  *) exit 0 ;;
+esac
 
 for w in "$NET"/*/wireless; do
   [[ -d "$w" ]] || continue

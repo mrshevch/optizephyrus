@@ -148,8 +148,8 @@ These are disabled and stopped, but only if they are enabled:
 ### 11. Wi-Fi power save on battery
 
 - **Files:** `/usr/local/libexec/g14-wifi-powersave` (copy of [`g14-wifi-powersave`](g14-wifi-powersave)), `/etc/udev/rules.d/90-g14-wifi-powersave.rules`, `/etc/NetworkManager/dispatcher.d/90-g14-wifi-powersave`.
-- **Change:** on battery the helper turns Wi-Fi power save on for every wireless interface. On AC it turns it off, as before. The udev rule runs it when the charger is plugged in or out. The NetworkManager dispatcher runs it after every connection.
-- **Why:** the connection profile has `802-11-wireless.powersave=disable`, and NetworkManager applies it on every connect, including after sleep. Without the dispatcher hook, the first lid close on battery would turn power save off again. On battery, charge matters more than Wi-Fi latency.
+- **Change:** on battery the helper turns Wi-Fi power save on for every wireless interface. On AC it turns it off, for low latency. If the charger state is unknown (no `AC0`), it changes nothing. The udev rule runs it when the charger is plugged in or out. The NetworkManager dispatcher runs it after every connection.
+- **Why:** if your connection profile has `802-11-wireless.powersave=disable` (the author's does), NetworkManager applies it on every connect, including after sleep. Without the dispatcher hook, the first lid close on battery would turn power save off again. On battery, charge matters more than Wi-Fi latency.
 - **Takes effect:** immediately.
 - **Limit:** online games on battery also run with power save on, so ping can spike. Plug in the charger for online games.
 
@@ -253,7 +253,7 @@ gamescope -W 2560 -H 1600 -w 1920 -h 1200 -F fsr -f -- gamemoderun %command%   #
 | `preempt=full` | `scx_lavd` preempts right away anyway. The default `lazy` mode only affects the stock EEVDF scheduler |
 | `power_dpm_force_performance_level=high`, C-state limits | On a laptop the CPU and GPU share one power and cooling budget. Pinned clocks and awake idle cores take boost headroom away from the cores doing the work |
 | amdgpu overdrive / undervolting | Needs calibration on each chip by hand (`amdgpu.ppfeaturemask` + LACT) |
-| Wi-Fi power save | Already off on this machine |
+| Wi-Fi power save | Off on AC. On battery it is on (section 11), so plug in for online games |
 
 ## Backups
 
@@ -310,10 +310,10 @@ iw dev wlp5s0 get power_save             # on on battery, off on AC
 rpm -q gnome-software                    # not installed (--lean)
 systemctl --global is-enabled localsearch-3.service   # masked (--lean)
 pgrep -l 'evolution|gnome-calendar'      # nothing (--no-calendar)
+sysctl vm.compaction_proactiveness       # 0 (gaming.sh)
 
 # power draw on battery, idle, 60 s average
 for i in $(seq 60); do cat /sys/class/power_supply/BAT0/power_now; sleep 1; done | awk '{s+=$1} END {printf "%.2f W\n", s/NR/1e6}'
-sysctl vm.compaction_proactiveness       # 0 (gaming.sh)
 
 # while a game runs with gamemoderun:
 gamemoded -s                             # gamemode is active

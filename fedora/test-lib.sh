@@ -44,7 +44,9 @@ echo 0 > "$T/ac"; wps
 echo 1 > "$T/ac"; wps
 [[ "$(cat "$T/iw.log")" == "dev wlx set power_save off" ]]  || fail "от сети power save не выключен"
 rm "$T/ac"; wps
-[[ "$(cat "$T/iw.log")" == "dev wlx set power_save off" ]]  || fail "без AC0 должно быть как от сети"
+[[ ! -e "$T/iw.log" ]]                                       || fail "без AC0 power save трогать нельзя"
+echo x > "$T/ac"; wps
+[[ ! -e "$T/iw.log" ]]                                       || fail "при непонятном AC0 power save трогать нельзя"
 rm -r "$T/net/wlx"; echo 0 > "$T/ac"; wps
 [[ ! -e "$T/iw.log" ]]                                       || fail "iw вызван без Wi-Fi-интерфейсов"
 mkdir -p "$T/net/wlx/wireless"; printf '#!/bin/sh\nexit 1\n' > "$T/iwbin/iw"
