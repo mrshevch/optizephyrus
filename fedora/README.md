@@ -48,7 +48,7 @@ You can combine the flags. You can also add one later by running the script agai
 - `+` — a command that runs, or a new file with its full content;
 - `~` — an existing file that changes, shown as a diff.
 
-Services restart only when their config changed. `sysctl --system` runs only when a live value differs from the file. A run with nothing to change prints *"Всё уже применено — изменений нет"* and removes its empty backup directory. `gaming.sh` behaves the same way.
+Services restart only when their config changed. `sysctl --system` runs only when a live value differs from the file. A run with nothing to change prints *"Everything is already applied, nothing to change"* and removes its empty backup directory. `gaming.sh` behaves the same way.
 
 **Update check.** The H.264/HEVC driver from RPM Fusion has to match the Mesa version in Fedora `updates`. If `dnf check-upgrade` reports pending updates, the script stops. In `--dry-run` it only prints a warning.
 

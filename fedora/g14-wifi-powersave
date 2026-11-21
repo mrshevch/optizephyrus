@@ -1,12 +1,12 @@
 #!/bin/bash
-# Энергосбережение Wi-Fi: на батарее включено, от сети выключено. Ставится optimize.sh в /usr/local/libexec.
-# Вызывают: правило udev при смене AC0 и dispatcher NetworkManager на «up» —
-# NM при каждом подключении применяет powersave из профиля подключения и перетирает значение.
-PATH="$PATH:/usr/bin:/usr/sbin"   # udev запускает с урезанным окружением
+# Wi-Fi power save: on when on battery, off when on AC. optimize.sh installs it to /usr/local/libexec.
+# Called by a udev rule when AC0 changes and by a NetworkManager dispatcher script on "up":
+# on every connect, NM applies powersave from the connection profile and overwrites the value.
+PATH="$PATH:/usr/bin:/usr/sbin"   # udev runs it with a stripped environment
 AC="${G14_AC_ONLINE:-/sys/class/power_supply/AC0/online}"
 NET="${G14_NET:-/sys/class/net}"
 
-# Нет AC0 или непонятное значение — питание неизвестно, power save не трогаем (ядро по умолчанию держит его включённым)
+# No AC0 or an unclear value: the power source is unknown, so leave power save alone (the kernel default keeps it on)
 case "$(cat "$AC" 2>/dev/null)" in
   0) ps=on ;;
   1) ps=off ;;
@@ -16,6 +16,6 @@ esac
 for w in "$NET"/*/wireless; do
   [[ -d "$w" ]] || continue
   i="${w%/wireless}"; i="${i##*/}"
-  iw dev "$i" set power_save "$ps" 2>/dev/null || true   # интерфейс не в режиме station — не наше дело
+  iw dev "$i" set power_save "$ps" 2>/dev/null || true   # an interface that is not in station mode is none of our business
 done
 exit 0
