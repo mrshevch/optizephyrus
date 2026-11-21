@@ -34,6 +34,22 @@ pkgs() { # pkgs [--опции dnf] <пакет>... — dnf install только 
   if [[ ${#m[@]} -eq 0 ]]; then ok "уже установлены: ${p[*]}"; else run dnf -y install "${o[@]}" "${m[@]}"; fi
 }
 
+unpkgs() { # unpkgs <пакет>... — dnf remove только установленных; имена — в removed-packages.txt, rollback поставит их обратно
+  local p m=()
+  for p in "$@"; do if rpm -q "$p" &>/dev/null; then m+=("$p"); fi; done
+  if [[ ${#m[@]} -eq 0 ]]; then ok "уже удалены: $*"; return; fi
+  [[ $DRY -eq 1 ]] || printf '%s\n' "${m[@]}" >> "$BK/removed-packages.txt"
+  run dnf -y remove "${m[@]}"
+}
+
+mask_user() { # mask_user <юнит>... — systemctl --global mask только ещё не замаскированных; имена — в masked-user-units.txt
+  local u m=()
+  for u in "$@"; do [[ "$(systemctl --global is-enabled "$u" 2>/dev/null)" == masked ]] || m+=("$u"); done
+  if [[ ${#m[@]} -eq 0 ]]; then ok "уже замаскированы: $*"; return; fi
+  [[ $DRY -eq 1 ]] || printf '%s\n' "${m[@]}" >> "$BK/masked-user-units.txt"
+  run systemctl --global mask "${m[@]}"
+}
+
 # Без «| grep -q»: с pipefail ранний выход grep убивает писателя SIGPIPE и даёт ложное «нет»
 repo_on() { [[ -n "$(dnf -q repolist --enabled "$1" 2>/dev/null)" ]]; }
 karg_on() { [[ " $(grubby --info=DEFAULT | sed -n 's/^args="\(.*\)"$/\1/p') " == *" $1 "* ]]; }

@@ -50,4 +50,23 @@ rm -r "$T/net/wlx"; echo 0 > "$T/ac"; wps
 mkdir -p "$T/net/wlx/wireless"; printf '#!/bin/sh\nexit 1\n' > "$T/iwbin/iw"
 wps                                                          || fail "ошибка iw уронила помощник"
 
+# --- unpkgs / mask_user: только недостающее, в dry-run бэкап не трогают ---
+DRY=1; BK="$T/nobk"
+out="$(unpkgs no-such-pkg-xyz)"
+[[ $out == *"✓"* ]]                                              || fail "unpkgs: неустановленный пакет не пропущен"
+out="$(unpkgs bash no-such-pkg-xyz)"
+[[ $out == "+ dnf -y remove bash" ]]                             || fail "unpkgs должен удалять только установленные: $out"
+out="$(mask_user no-such-unit-xyz.service)"
+[[ $out == "+ systemctl --global mask no-such-unit-xyz.service" ]] || fail "mask_user: $out"
+mkdir -p "$T/sdbin"; printf '#!/bin/sh\necho masked\n' > "$T/sdbin/systemctl"; chmod +x "$T/sdbin/systemctl"
+out="$(PATH="$T/sdbin:$PATH" mask_user x.service)"
+[[ $out == *"✓"* ]]                                              || fail "mask_user: замаскированный не пропущен"
+[[ ! -e $BK ]]                                                   || fail "dry-run записал в бэкап"
+DRY=0; BK="$T/bk2"; mkdir -p "$BK" "$T/stub"   # вне dry-run: заглушки вместо dnf/systemctl, проверяем журналы для rollback
+printf '#!/bin/sh\necho enabled\n' > "$T/stub/systemctl"; printf '#!/bin/sh\nexit 0\n' > "$T/stub/dnf"; chmod +x "$T/stub/"*
+PATH="$T/stub:$PATH" unpkgs bash no-such-pkg-xyz >/dev/null
+PATH="$T/stub:$PATH" mask_user a.service b.service >/dev/null
+[[ "$(cat "$BK/removed-packages.txt")" == "bash" ]]                  || fail "unpkgs: журнал удалённых пакетов"
+[[ "$(cat "$BK/masked-user-units.txt")" == $'a.service\nb.service' ]] || fail "mask_user: журнал замаскированных юнитов"
+
 echo "OK: lib.sh"
