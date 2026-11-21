@@ -52,6 +52,7 @@ for (( i=${#BKS[@]}-1; i>=0; i-- )); do   # от новых к старым
 done
 
 systemctl daemon-reload
+udevadm control --reload   # удалённое правило Wi-Fi перестаёт действовать
 sysctl --system -q
 systemctl try-restart tuned-ppd   # перечитать восстановленный ppd.conf
 echo "Откат выполнен. Перезагрузитесь."

@@ -244,6 +244,31 @@ if [[ $ASUS -eq 1 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+log "11. Wi-Fi: энергосбережение на батарее, от сети — выключено"
+# В профиле подключения стоит powersave=disable, и NM применяет его при каждом подключении (в том числе после сна),
+# поэтому помощник зовут и udev (сменилось питание), и dispatcher NM (подключились)
+WPS=/usr/local/libexec/g14-wifi-powersave
+WPS_NM=/etc/NetworkManager/dispatcher.d/90-g14-wifi-powersave
+put "$WPS" < "$(dirname "${BASH_SOURCE[0]}")/g14-wifi-powersave"
+put /etc/udev/rules.d/90-g14-wifi-powersave.rules <<EOF
+# Зарядку подключили или отключили — переключить power save Wi-Fi
+SUBSYSTEM=="power_supply", KERNEL=="AC0", ACTION=="change", RUN+="$WPS"
+EOF
+put "$WPS_NM" <<EOF
+#!/bin/sh
+# NM при каждом подключении применяет powersave из профиля подключения — вернуть «на батарее включено»
+[ "\$2" = up ] && exec $WPS
+exit 0
+EOF
+for f in "$WPS" "$WPS_NM"; do [[ -x "$f" ]] || run chmod 755 "$f"; done   # NM запускает только исполняемые root-файлы
+if [[ $CHANGED -eq 1 ]]; then
+  run udevadm control --reload
+  run "$WPS"   # применить сразу, не дожидаясь смены питания
+else
+  ok "power save Wi-Fi переключается по питанию"
+fi
+
+# ---------------------------------------------------------------------------
 summary
 if [[ $REBOOT -eq 1 ]]; then echo "Перезагрузитесь, чтобы применились zram и nowatchdog."; fi
 echo "Проверка (zram и nowatchdog — после перезагрузки):"
@@ -253,3 +278,4 @@ echo "  sysctl net.ipv4.tcp_congestion_control   # bbr"
 echo "  grep ^performance= /etc/tuned/ppd.conf   # performance=g14-performance"
 echo "  cat /proc/sys/kernel/watchdog            # 0"
 if [[ $SCX -eq 1 ]]; then echo "  cat /sys/kernel/sched_ext/root/ops       # lavd"; fi
+echo "  iw dev wlp5s0 get power_save             # on от батареи, off от сети"

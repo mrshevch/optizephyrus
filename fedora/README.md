@@ -8,7 +8,8 @@ Tested on Fedora 44 Workstation (kernel 7.3, GNOME), installed with the default 
 | `gaming.sh` | Applies the gaming changes ([section](#what-gamingsh-changes)) |
 | `rollback.sh` | Reverts both from the backups |
 | `lib.sh` | Shared helpers for `optimize.sh` and `gaming.sh` |
-| `test-lib.sh` | Self-test for `lib.sh`, runs without root: `bash test-lib.sh` |
+| `g14-wifi-powersave` | Wi-Fi power save helper that `optimize.sh` installs ([section 11](#11-wi-fi-power-save-on-battery)) |
+| `test-lib.sh` | Self-test for `lib.sh` and `g14-wifi-powersave`, runs without root: `bash test-lib.sh` |
 
 ## Usage
 
@@ -32,7 +33,7 @@ sudo reboot
 
 | Flag | Effect |
 |------|--------|
-| *(none)* | Base set, sections 1–8 |
+| *(none)* | Base set, sections 1–8 and 11 |
 | `--scx` | Also installs the `scx_lavd` scheduler (section 9) |
 | `--asus` | Also installs `asusctl` (section 10) |
 | `--dry-run` | Prints every command and file it would run or write, and changes nothing |
@@ -142,6 +143,14 @@ These are disabled and stopped, but only if they are enabled:
 - **Installs:** `asusctl`. Enables `asusd`.
 - **Gives you:** fan curves, keyboard backlight control and panel overdrive.
 
+### 11. Wi-Fi power save on battery
+
+- **Files:** `/usr/local/libexec/g14-wifi-powersave` (copy of [`g14-wifi-powersave`](g14-wifi-powersave)), `/etc/udev/rules.d/90-g14-wifi-powersave.rules`, `/etc/NetworkManager/dispatcher.d/90-g14-wifi-powersave`.
+- **Change:** on battery the helper turns Wi-Fi power save on for every wireless interface. On AC it turns it off, as before. The udev rule runs it when the charger is plugged in or out. The NetworkManager dispatcher runs it after every connection.
+- **Why:** the connection profile has `802-11-wireless.powersave=disable`, and NetworkManager applies it on every connect, including after sleep. Without the dispatcher hook, the first lid close on battery would turn power save off again. On battery, charge matters more than Wi-Fi latency.
+- **Takes effect:** immediately.
+- **Limit:** online games on battery also run with power save on, so ping can spike. Plug in the charger for online games.
+
 ### Left out on purpose
 
 - **supergfxctl:** without it, the RX 6700S already powers off fully (runtime PM, D3cold) when nothing uses it.
@@ -241,6 +250,7 @@ sudo bash rollback.sh && sudo reboot
 - restores overwritten files and deletes files the scripts created;
 - restores `/etc/fstab`, `/etc/dnf/dnf.conf` and `/etc/tuned/ppd.conf`;
 - re-enables the services and repos the scripts disabled;
+- reloads udev rules, so the Wi-Fi rule stops working once its file is deleted;
 - disables `scx_loader`;
 - removes the `nowatchdog` and `mitigations=off` kernel arguments;
 - removes the user from the `gamemode` group.
@@ -262,6 +272,7 @@ cat /proc/sys/kernel/watchdog            # 0
 findmnt -no OPTIONS /                    # contains noatime
 cat /sys/kernel/sched_ext/root/ops       # lavd (with --scx)
 grep ^performance= /etc/tuned/ppd.conf   # performance=g14-performance
+iw dev wlp5s0 get power_save             # on on battery, off on AC
 sysctl vm.compaction_proactiveness       # 0 (gaming.sh)
 
 # while a game runs with gamemoderun:
