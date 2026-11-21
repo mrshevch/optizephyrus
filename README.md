@@ -32,7 +32,7 @@ sudo dnf upgrade --refresh && sudo reboot   # the script refuses to run with pen
 cd fedora
 sudo bash optimize.sh --dry-run             # show the plan, change nothing
 sudo bash optimize.sh                       # apply
-sudo bash optimize.sh --lean --no-calendar  # optional: no background updates, file indexer, calendar
+sudo bash optimize.sh --lean --no-calendar  # optional: no background updates, file indexer, Typing Booster, calendar
 sudo bash gaming.sh                         # optional: gaming tweaks (GameMode, packages, sysctl)
 sudo reboot
 ```

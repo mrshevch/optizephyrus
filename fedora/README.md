@@ -36,7 +36,7 @@ sudo reboot
 | *(none)* | Base set, sections 1–8 and 11 |
 | `--scx` | Also installs the `scx_lavd` scheduler (section 9) |
 | `--asus` | Also installs `asusctl` (section 10) |
-| `--lean` | Also removes GNOME Software, disables `dnf-makecache.timer` and the file indexer (section 12) |
+| `--lean` | Also removes GNOME Software and Typing Booster, disables `dnf-makecache.timer` and the file indexer (section 12) |
 | `--no-calendar` | Also removes GNOME Calendar and Contacts and masks evolution-data-server (section 13) |
 | `--dry-run` | Prints every command and file it would run or write, and changes nothing |
 
@@ -153,15 +153,16 @@ These are disabled and stopped, but only if they are enabled:
 - **Takes effect:** immediately.
 - **Limit:** online games on battery also run with power save on, so ping can spike. Plug in the charger for online games.
 
-### 12. `--lean`: no background updates, no file indexer
+### 12. `--lean`: no background updates, no file indexer, no Typing Booster
 
-For people who update by hand and never search file contents.
+For people who update by hand, never search file contents and type with plain keyboard layouts (no word prediction).
 
 | What | Change | Why |
 |------|--------|-----|
 | GNOME Software | Removes `gnome-software` and `gnome-software-fedora-langpacks` | It runs for the whole session (about 245 MB RSS, plus about 126 MB for the `dnf5daemon-server` it starts) and downloads updates in the background. Its autostart cannot be turned off without breaking the app window: the session and the app menu start the same user service |
 | `dnf-makecache.timer` | Disabled | Refreshes dnf metadata in the background. `dnf upgrade --refresh` does it anyway |
 | localsearch (file indexer) | `systemctl --global mask localsearch-3.service` | Crawls and indexes your files. Without it, Nautilus searches by file name only |
+| Typing Booster | Removes `ibus-typing-booster` | A predictive-text input method written in Python. Once started, it stays for the rest of the session (about 105 MB RSS), even if your input sources are only keyboard layouts. If you added *Typing Booster* as an input source, do not use `--lean` |
 
 - **Updates from now on:** `sudo dnf upgrade --refresh` and `flatpak update`.
 - **Takes effect:** after you log in again. Processes that are already running keep running until then.
@@ -307,7 +308,7 @@ findmnt -no OPTIONS /                    # contains noatime
 cat /sys/kernel/sched_ext/root/ops       # lavd (with --scx)
 grep ^performance= /etc/tuned/ppd.conf   # performance=g14-performance
 iw dev wlp5s0 get power_save             # on on battery, off on AC
-rpm -q gnome-software                    # not installed (--lean)
+rpm -q gnome-software ibus-typing-booster   # not installed (--lean)
 systemctl --global is-enabled localsearch-3.service   # masked (--lean)
 pgrep -l 'evolution|gnome-calendar'      # nothing (--no-calendar)
 sysctl vm.compaction_proactiveness       # 0 (gaming.sh)

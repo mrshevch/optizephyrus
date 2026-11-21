@@ -6,7 +6,7 @@
 # Usage:    sudo bash optimize.sh            — base set (safe, reversible)
 #           sudo bash optimize.sh --asus     — plus asusctl (COPR lukenukem/asus-linux)
 #           sudo bash optimize.sh --scx      — plus the scx_lavd scheduler (COPR bieszczaders/kernel-cachyos-addons)
-#           sudo bash optimize.sh --lean     — plus no gnome-software, dnf-makecache.timer or file indexer
+#           sudo bash optimize.sh --lean     — plus no gnome-software, dnf-makecache.timer, file indexer or Typing Booster
 #           sudo bash optimize.sh --no-calendar — plus no Calendar, Contacts or evolution-data-server
 #           sudo bash optimize.sh --dry-run  — only show what would be done
 # Flags can be combined and added later with another run: sudo bash optimize.sh --scx --asus
@@ -274,10 +274,12 @@ fi
 
 # ---------------------------------------------------------------------------
 if [[ $LEAN -eq 1 ]]; then
-  log "12. --lean: no background updates, no file indexer"
+  log "12. --lean: no background updates, no file indexer, no Typing Booster"
   # gnome-software holds about 245 MB for the whole session (+ dnf5daemon-server about 126 MB) and downloads updates by itself.
   # Its autostart cannot be turned off without breaking the app window: the session and the menu start the same user service
   unpkgs gnome-software gnome-software-fedora-langpacks
+  # Typing Booster: a predictive-text input method in Python (about 105 MB RSS), starts even with plain keyboard layouts
+  unpkgs ibus-typing-booster
   if systemctl is-enabled -q dnf-makecache.timer; then
     [[ $DRY -eq 1 ]] || echo dnf-makecache.timer >> "$BK/disabled-services.txt"
     run systemctl disable --now dnf-makecache.timer
@@ -310,6 +312,6 @@ echo "  cat /proc/sys/kernel/watchdog            # 0"
 if [[ $SCX -eq 1 ]]; then echo "  cat /sys/kernel/sched_ext/root/ops       # lavd"; fi
 echo "  iw dev wlp5s0 get power_save             # on on battery, off on AC"
 if [[ $LEAN -eq 1 ]]; then
-  echo "  rpm -q gnome-software                    # not installed"
+  echo "  rpm -q gnome-software ibus-typing-booster   # not installed"
   echo "  systemctl --global is-enabled localsearch-3.service   # masked"
 fi
