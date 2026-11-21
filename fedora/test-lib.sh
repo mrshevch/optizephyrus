@@ -58,6 +58,8 @@ out="$(unpkgs no-such-pkg-xyz)"
 [[ $out == *"✓"* ]]                                              || fail "unpkgs: package that is not installed was not skipped"
 out="$(unpkgs bash no-such-pkg-xyz)"
 [[ $out == "+ dnf -y remove bash" ]]                             || fail "unpkgs must remove only installed packages: $out"
+out="$(unpkgs --no-autoremove bash)"
+[[ $out == "+ dnf -y remove --no-autoremove bash" ]]             || fail "unpkgs must pass options to dnf: $out"
 out="$(mask_user no-such-unit-xyz.service)"
 [[ $out == "+ systemctl --global mask no-such-unit-xyz.service" ]] || fail "mask_user: $out"
 mkdir -p "$T/sdbin"; printf '#!/bin/sh\necho masked\n' > "$T/sdbin/systemctl"; chmod +x "$T/sdbin/systemctl"
@@ -66,7 +68,7 @@ out="$(PATH="$T/sdbin:$PATH" mask_user x.service)"
 [[ ! -e $BK ]]                                                   || fail "dry-run wrote to the backup"
 DRY=0; BK="$T/bk2"; mkdir -p "$BK" "$T/stub"   # not dry-run: stubs replace dnf/systemctl, check the logs rollback reads
 printf '#!/bin/sh\necho enabled\n' > "$T/stub/systemctl"; printf '#!/bin/sh\nexit 0\n' > "$T/stub/dnf"; chmod +x "$T/stub/"*
-PATH="$T/stub:$PATH" unpkgs bash no-such-pkg-xyz >/dev/null
+PATH="$T/stub:$PATH" unpkgs --no-autoremove bash no-such-pkg-xyz >/dev/null   # options must not reach the log
 PATH="$T/stub:$PATH" mask_user a.service b.service >/dev/null
 [[ "$(cat "$BK/removed-packages.txt")" == "bash" ]]                  || fail "unpkgs: removed-packages log"
 [[ "$(cat "$BK/masked-user-units.txt")" == $'a.service\nb.service' ]] || fail "mask_user: masked-user-units log"

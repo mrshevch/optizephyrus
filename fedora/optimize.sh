@@ -278,8 +278,9 @@ if [[ $LEAN -eq 1 ]]; then
   # gnome-software holds about 245 MB for the whole session (+ dnf5daemon-server about 126 MB) and downloads updates by itself.
   # Its autostart cannot be turned off without breaking the app window: the session and the menu start the same user service
   unpkgs gnome-software gnome-software-fedora-langpacks
-  # Typing Booster: a predictive-text input method in Python (about 105 MB RSS), starts even with plain keyboard layouts
-  unpkgs ibus-typing-booster
+  # Typing Booster: a predictive-text input method in Python (about 105 MB RSS), starts even with plain keyboard layouts.
+  # --no-autoremove: its dependencies include the Noto Emoji and Symbola fonts, which other apps fall back to
+  unpkgs --no-autoremove ibus-typing-booster
   if systemctl is-enabled -q dnf-makecache.timer; then
     [[ $DRY -eq 1 ]] || echo dnf-makecache.timer >> "$BK/disabled-services.txt"
     run systemctl disable --now dnf-makecache.timer

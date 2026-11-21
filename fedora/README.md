@@ -162,7 +162,7 @@ For people who update by hand, never search file contents and type with plain ke
 | GNOME Software | Removes `gnome-software` and `gnome-software-fedora-langpacks` | It runs for the whole session (about 245 MB RSS, plus about 126 MB for the `dnf5daemon-server` it starts) and downloads updates in the background. Its autostart cannot be turned off without breaking the app window: the session and the app menu start the same user service |
 | `dnf-makecache.timer` | Disabled | Refreshes dnf metadata in the background. `dnf upgrade --refresh` does it anyway |
 | localsearch (file indexer) | `systemctl --global mask localsearch-3.service` | Crawls and indexes your files. Without it, Nautilus searches by file name only |
-| Typing Booster | Removes `ibus-typing-booster` | A predictive-text input method written in Python. Once started, it stays for the rest of the session (about 105 MB RSS), even if your input sources are only keyboard layouts. If you added *Typing Booster* as an input source, do not use `--lean` |
+| Typing Booster | Removes `ibus-typing-booster` only (`--no-autoremove`). Its dependencies stay, among them the Noto Emoji and Symbola fonts that other apps use for symbols | A predictive-text input method written in Python. Once started, it stays for the rest of the session (about 105 MB RSS), even if your input sources are only keyboard layouts. If you added *Typing Booster* as an input source, do not use `--lean` |
 
 - **Updates from now on:** `sudo dnf upgrade --refresh` and `flatpak update`.
 - **Takes effect:** after you log in again. Processes that are already running keep running until then.

@@ -34,12 +34,15 @@ pkgs() { # pkgs [--dnf-options] <package>... — dnf install only the missing on
   if [[ ${#m[@]} -eq 0 ]]; then ok "already installed: ${p[*]}"; else run dnf -y install "${o[@]}" "${m[@]}"; fi
 }
 
-unpkgs() { # unpkgs <package>... — dnf remove only the installed ones; names go to removed-packages.txt so rollback reinstalls them
-  local p m=()
-  for p in "$@"; do if rpm -q "$p" &>/dev/null; then m+=("$p"); fi; done
-  if [[ ${#m[@]} -eq 0 ]]; then ok "already removed: $*"; return; fi
+unpkgs() { # unpkgs [dnf options] <package>... — dnf remove only the installed ones; names go to removed-packages.txt so rollback reinstalls them
+  local p o=() names=() m=()
+  for p in "$@"; do
+    if [[ $p == -* ]]; then o+=("$p"); continue; fi
+    names+=("$p"); if rpm -q "$p" &>/dev/null; then m+=("$p"); fi
+  done
+  if [[ ${#m[@]} -eq 0 ]]; then ok "already removed: ${names[*]}"; return; fi
   [[ $DRY -eq 1 ]] || printf '%s\n' "${m[@]}" >> "$BK/removed-packages.txt"
-  run dnf -y remove "${m[@]}"
+  run dnf -y remove "${o[@]}" "${m[@]}"
 }
 
 mask_user() { # mask_user <unit>... — systemctl --global mask only the units not masked yet; names go to masked-user-units.txt
