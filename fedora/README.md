@@ -4,8 +4,11 @@ Tested on Fedora 44 Workstation (kernel 7.3, GNOME), installed with the default 
 
 | File | Purpose |
 |------|---------|
-| `optimize.sh` | Applies the changes listed below |
-| `rollback.sh` | Reverts them from the backups |
+| `optimize.sh` | Applies the base changes listed below |
+| `gaming.sh` | Applies the gaming changes ([section](#what-gamingsh-changes)) |
+| `rollback.sh` | Reverts both from the backups |
+| `lib.sh` | Shared helpers for `optimize.sh` and `gaming.sh` |
+| `test-lib.sh` | Self-test for `lib.sh`, runs without root: `bash test-lib.sh` |
 
 ## Usage
 
@@ -19,7 +22,11 @@ sudo bash optimize.sh --dry-run --scx
 # 3. Apply
 sudo bash optimize.sh --scx
 
-# 4. Reboot (needed for zram and the kernel argument)
+# 4. Gaming tweaks (optional): preview, then apply
+sudo bash gaming.sh --dry-run
+sudo bash gaming.sh
+
+# 5. Reboot (needed for zram, kernel arguments and the gamemode group)
 sudo reboot
 ```
 
@@ -30,7 +37,15 @@ sudo reboot
 | `--asus` | Also installs `asusctl` (section 10) |
 | `--dry-run` | Prints every command and file it would run or write, and changes nothing |
 
-You can combine the flags. You can also add one later by running the script again, for example `sudo bash optimize.sh --scx --asus`. Every run applies the base set again, which is safe because it is idempotent.
+You can combine the flags. You can also add one later by running the script again, for example `sudo bash optimize.sh --scx --asus`.
+
+**Re-runs.** Each step first checks whether it is already applied. In the output:
+
+- `✓` — already applied, nothing is run;
+- `+` — a command that runs, or a new file with its full content;
+- `~` — an existing file that changes, shown as a diff.
+
+Services restart only when their config changed. `sysctl --system` runs only when a live value differs from the file. A run with nothing to change prints *"Всё уже применено — изменений нет"* and removes its empty backup directory. `gaming.sh` behaves the same way.
 
 **Update check.** The H.264/HEVC driver from RPM Fusion has to match the Mesa version in Fedora `updates`. If `dnf check-upgrade` reports pending updates, the script stops. In `--dry-run` it only prints a warning.
 
@@ -63,6 +78,13 @@ You can combine the flags. You can also add one later by running the script agai
 | `net.ipv4.tcp_congestion_control` | `bbr` | Better upload throughput on lossy Wi-Fi than `cubic` |
 | `net.ipv4.tcp_mtu_probing` | 1 | Recovers from PMTU black holes |
 
+**GNOME *Performance* mode no longer undoes these values.**
+
+- **Files:** `/etc/tuned/profiles/g14-performance/tuned.conf`. In `/etc/tuned/ppd.conf`, the line `performance=throughput-performance` becomes `performance=g14-performance`. `tuned-ppd` is restarted if either of them changed.
+- **Why:** *Performance* maps to tuned's server profile `throughput-performance`. That profile sets `vm.swappiness=10` and dirty limits of 40 %/10 %, which overrides the zram and writeback values above every time you pick *Performance*.
+- **The new profile** keeps the parts that make *Performance* faster: governor `performance`, EPP `performance`, boost on, `platform_profile=performance` (ASUS *Performance* thermal policy: higher CPU/dGPU power limits and fan speeds), panel power savings off.
+- **Takes effect:** immediately.
+
 ### 3. H.264/HEVC hardware decoding and full ffmpeg
 
 - **Installs:** the RPM Fusion *free* release package (if missing), `mesa-va-drivers-freeworld` and its i686 build, and `libva-utils`.
@@ -90,7 +112,7 @@ These are disabled and stopped, but only if they are enabled:
 ### 6. journald size limit
 
 - **File:** `/etc/systemd/journald.conf.d/90-size.conf`
-- **Change:** `SystemMaxUse=300M`, `RuntimeMaxUse=64M`. Then journald is restarted and `journalctl --vacuum-size=300M` runs.
+- **Change:** `SystemMaxUse=300M`, `RuntimeMaxUse=64M`. If the file changed, journald is restarted and `journalctl --vacuum-size=300M` runs.
 - **Note:** logs older than the 300 MB limit are deleted right away. Rollback cannot bring them back.
 
 ### 7. btrfs `noatime`
@@ -111,7 +133,7 @@ These are disabled and stopped, but only if they are enabled:
 - **Repo:** COPR `bieszczaders/kernel-cachyos-addons`, limited with `includepkgs=scx-scheds,scx-tools`. Nothing else, such as a kernel, can come from it.
 - **Installs:** `scx-scheds`, `scx-tools`.
 - **File:** `/etc/scx_loader.toml`. The default scheduler is `scx_lavd` in `Auto` mode with `--autopower`, so it follows the current power profile on its own.
-- **Service:** enables and starts `scx_loader.service`.
+- **Service:** enables and starts `scx_loader.service`, or restarts it if `/etc/scx_loader.toml` changed.
 - **Control:** `scxctl switch -m gaming|powersave|auto`. To go back to the stock EEVDF scheduler right away, run `sudo systemctl disable --now scx_loader`.
 
 ### 10. `--asus`: asusctl
@@ -126,9 +148,77 @@ These are disabled and stopped, but only if they are enabled:
 - **Battery charge limit:** GNOME already handles it (*Settings → Power → Preserve Battery Health*).
 - **`sp5100_tco` hardware watchdog:** see section 8.
 
+## What `gaming.sh` changes
+
+Run `optimize.sh` first. GameMode switches to *Performance* while a game runs, and without the `g14-performance` profile from [section 2](#2-sysctl-memory-desktop-and-network) that mode sets `vm.swappiness=10`. `gaming.sh` checks this and stops if the profile is missing. With `--scx`, `scx_lavd --autopower` follows the CPU energy preference, so it switches itself to performance mode when a game starts.
+
+| Flag | Effect |
+|------|--------|
+| *(none)* | Sections 1–3 |
+| `--no-mitigations` | Also adds the `mitigations=off` kernel argument (section 4) |
+| `--dry-run` | Prints every command and file, changes nothing |
+
+### 1. Packages
+
+`gamemode.i686`, `mangohud` + `.i686`, `gamescope`. Without the 32-bit GameMode library, 32-bit games never turn GameMode on. MangoHud shows FPS and frame times. gamescope gives FSR upscaling (see [Steam launch options](#steam-launch-options)).
+
+### 2. GameMode
+
+- **Group:** adds you (`$SUDO_USER`) to `gamemode`. Without it, polkit blocks GameMode's governor helper and `limits.d` blocks the nice change, so GameMode silently does nothing.
+- **File:** `/etc/gamemode.ini`, on top of the defaults in `/usr/share/gamemode/gamemode.ini`:
+  - `renice=10`: the game runs at nice −10, the most the `gamemode` group may use.
+  - `start`/`end` hooks: switch the power profile to *Performance* (`g14-performance`) while a game runs, and back to *Balanced* after it. They use the same D-Bus call as GNOME's menu, so no password is needed.
+- **Limit:** after a game the profile always goes back to *Balanced*, even if you were on *Power Saver* before.
+
+### 3. sysctl (SteamOS values)
+
+- **File:** `/etc/sysctl.d/91-g14-gaming.conf`
+
+| Key | Value | Why |
+|-----|-------|-----|
+| `vm.compaction_proactiveness` | 0 | Background compaction moves pages around and causes TLB shootdowns on every core, which shows up as micro-stutter |
+| `vm.page_lock_unfairness` | 1 | A waiting thread gets the page lock sooner, which shortens latency spikes |
+
+### 4. `--no-mitigations`: kernel argument `mitigations=off`
+
+- **Why:** on this CPU the kernel runs SRSO *Safe RET*, STIBP *always-on* and the TSA buffer clear on every return from the kernel. Wine/Proton makes many system calls, so it pays for these more than native apps do.
+- **Cost:** no protection against Spectre-class attacks from local code (other users, malicious programs). Use it only on a single-user machine.
+- **Check:** `cat /sys/devices/system/cpu/vulnerabilities/spec_rstack_overflow` prints `Vulnerable`.
+
+### Steam launch options
+
+*Game → Properties → Launch Options:*
+
+```
+gamemoderun %command%                                                   # GameMode
+mangohud gamemoderun %command%                                          # plus FPS overlay
+gamescope -W 2560 -H 1600 -w 1920 -h 1200 -F fsr -f -- gamemoderun %command%   # render at 1920×1200, FSR upscale
+```
+
+`steam.desktop` already has `PrefersNonDefaultGPU=true`, so GNOME starts Steam and its games on the RX 6700S.
+
+### Manual switches
+
+- **120 Hz and VRR.** The panel supports 2560×1600 at 120 Hz with variable refresh rate. Turn both on in *Settings → Displays → Refresh Rate*. At 60 Hz you never see more than 60 FPS.
+- **MUX (dGPU only).** The RX 6700S drives the internal panel directly, with no copy through the iGPU. This gives more FPS in CPU-bound games but uses much more battery. Not tested by these scripts.
+  ```bash
+  echo 0 | sudo tee /sys/class/firmware-attributes/asus-armoury/attributes/gpu_mux_mode/current_value && sudo reboot   # dGPU only
+  echo 1 | sudo tee /sys/class/firmware-attributes/asus-armoury/attributes/gpu_mux_mode/current_value && sudo reboot   # back to hybrid
+  ```
+
+### Left out on purpose
+
+| What | Why not |
+|------|---------|
+| Custom kernel (CachyOS etc.) | The Fedora 7.3 kernel already has what games use: sched_ext (`scx_lavd`), NTSYNC (`/dev/ntsync`, loaded at boot, Proton picks it up automatically), a 1000 Hz tick and `amd-pstate-epp`. An `-O3`/x86-64-v3 build adds little, and an out-of-tree kernel complicates Fedora updates and SELinux |
+| `preempt=full` | `scx_lavd` preempts right away anyway. The default `lazy` mode only affects the stock EEVDF scheduler |
+| `power_dpm_force_performance_level=high`, C-state limits | On a laptop the CPU and GPU share one power and cooling budget. Pinned clocks and awake idle cores take boost headroom away from the cores doing the work |
+| amdgpu overdrive / undervolting | Needs calibration on each chip by hand (`amdgpu.ppfeaturemask` + LACT) |
+| Wi-Fi power save | Already off on this machine |
+
 ## Backups
 
-Each run (except `--dry-run`) creates `/var/backups/os-tune-YYYYmmdd-HHMMSS/` with:
+Each run that changes something (not `--dry-run`) creates `/var/backups/os-tune-YYYYmmdd-HHMMSS/` with:
 
 | Entry | Contents |
 |-------|----------|
@@ -136,8 +226,9 @@ Each run (except `--dry-run`) creates `/var/backups/os-tune-YYYYmmdd-HHMMSS/` wi
 | `created-files.txt` | Every file the run wrote |
 | `disabled-services.txt` | Services the run disabled |
 | `disabled-repos.txt` | Repos the run disabled |
-| `fstab`, `dnf.conf` | Originals before editing |
-| `added-nowatchdog`, `enabled-scx` | Markers for kernel-argument and scx changes |
+| `fstab`, `dnf.conf`, `ppd.conf` | Originals before editing |
+| `added-nowatchdog`, `added-mitigations-off`, `enabled-scx` | Markers for kernel-argument and scx changes |
+| `added-gamemode-group` | The user added to the `gamemode` group |
 
 ## Rollback
 
@@ -145,17 +236,18 @@ Each run (except `--dry-run`) creates `/var/backups/os-tune-YYYYmmdd-HHMMSS/` wi
 sudo bash rollback.sh && sudo reboot
 ```
 
-`rollback.sh` goes through all `/var/backups/os-tune-*` directories from newest to oldest, so you end up with the state from before the first run. It:
+`rollback.sh` goes through all `/var/backups/os-tune-*` directories (from both `optimize.sh` and `gaming.sh`) from newest to oldest, so you end up with the state from before the first run. It:
 
 - restores overwritten files and deletes files the scripts created;
-- restores `/etc/fstab` and `/etc/dnf/dnf.conf`;
+- restores `/etc/fstab`, `/etc/dnf/dnf.conf` and `/etc/tuned/ppd.conf`;
 - re-enables the services and repos the scripts disabled;
 - disables `scx_loader`;
-- removes the `nowatchdog` kernel argument.
+- removes the `nowatchdog` and `mitigations=off` kernel arguments;
+- removes the user from the `gamemode` group.
 
 It does **not**:
 
-- uninstall packages (RPM Fusion, `mesa-va-drivers-freeworld`, `ffmpeg`, `scx-scheds`, `asusctl`) or swap `ffmpeg` back to `ffmpeg-free`;
+- uninstall packages (RPM Fusion, `mesa-va-drivers-freeworld`, `ffmpeg`, `scx-scheds`, `asusctl`, `gamemode.i686`, `mangohud`, `gamescope`) or swap `ffmpeg` back to `ffmpeg-free`;
 - disable the COPR repos or the `asusd` service;
 - restore journal entries that the vacuum deleted;
 - delete the backup directories.
@@ -169,6 +261,13 @@ sysctl net.ipv4.tcp_congestion_control   # bbr
 cat /proc/sys/kernel/watchdog            # 0
 findmnt -no OPTIONS /                    # contains noatime
 cat /sys/kernel/sched_ext/root/ops       # lavd (with --scx)
+grep ^performance= /etc/tuned/ppd.conf   # performance=g14-performance
+sysctl vm.compaction_proactiveness       # 0 (gaming.sh)
+
+# while a game runs with gamemoderun:
+gamemoded -s                             # gamemode is active
+cat /sys/firmware/acpi/platform_profile  # performance
+sysctl vm.swappiness                     # still 180, not 10
 ```
 
 `pci-0000:07:00.0` is the Radeon 680M iGPU on the GA402R.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Откат всех запусков optimize.sh:  sudo bash rollback.sh
+# Откат всех запусков optimize.sh и gaming.sh:  sudo bash rollback.sh
 # Бэкапы обходятся от новых к старым, поэтому в итоге восстанавливается состояние до первого запуска.
-# Пакеты (кодеки, RPM Fusion, scx, asusctl) не удаляются — при необходимости вручную.
+# Пакеты (кодеки, RPM Fusion, scx, asusctl, gamemode.i686, mangohud, gamescope) не удаляются — при необходимости вручную.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "Запустите через sudo"; exit 1; }
 
@@ -23,6 +23,7 @@ for (( i=${#BKS[@]}-1; i>=0; i-- )); do   # от новых к старым
 
   [[ -f "$BK/fstab" ]]    && cp -a "$BK/fstab" /etc/fstab
   [[ -f "$BK/dnf.conf" ]] && cp -a "$BK/dnf.conf" /etc/dnf/dnf.conf
+  [[ -f "$BK/ppd.conf" ]] && cp -a "$BK/ppd.conf" /etc/tuned/ppd.conf
 
   if [[ -f "$BK/disabled-services.txt" ]]; then
     while read -r s; do
@@ -42,8 +43,15 @@ for (( i=${#BKS[@]}-1; i>=0; i-- )); do   # от новых к старым
   if [[ -f "$BK/added-nowatchdog" ]]; then
     grubby --update-kernel=ALL --remove-args="nowatchdog"
   fi
+  if [[ -f "$BK/added-mitigations-off" ]]; then
+    grubby --update-kernel=ALL --remove-args="mitigations=off"
+  fi
+  if [[ -f "$BK/added-gamemode-group" ]]; then
+    gpasswd -d "$(cat "$BK/added-gamemode-group")" gamemode || true
+  fi
 done
 
 systemctl daemon-reload
 sysctl --system -q
+systemctl try-restart tuned-ppd   # перечитать восстановленный ppd.conf
 echo "Откат выполнен. Перезагрузитесь."

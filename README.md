@@ -32,9 +32,11 @@ sudo dnf upgrade --refresh && sudo reboot   # the script refuses to run with pen
 cd fedora
 sudo bash optimize.sh --dry-run             # show the plan, change nothing
 sudo bash optimize.sh                       # apply
+sudo bash gaming.sh                         # optional: gaming tweaks (GameMode, packages, sysctl)
 sudo reboot
 ```
 
+Running a script again is safe: it skips steps that are already applied (marked `✓`) and prints only real changes.
 [fedora/README.md](fedora/README.md) lists everything the scripts change and how to undo it.
 
 ## Disclaimer
