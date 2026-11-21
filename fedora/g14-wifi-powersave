@@ -1,0 +1,17 @@
+#!/bin/bash
+# Энергосбережение Wi-Fi: на батарее включено, от сети выключено. Ставится optimize.sh в /usr/local/libexec.
+# Вызывают: правило udev при смене AC0 и dispatcher NetworkManager на «up» —
+# NM при каждом подключении применяет powersave из профиля подключения и перетирает значение.
+PATH="$PATH:/usr/bin:/usr/sbin"   # udev запускает с урезанным окружением
+AC="${G14_AC_ONLINE:-/sys/class/power_supply/AC0/online}"
+NET="${G14_NET:-/sys/class/net}"
+
+ps=off   # нет AC0 или неизвестное значение — как от сети, то есть ничего не меняем по сравнению с прежним
+[[ "$(cat "$AC" 2>/dev/null)" == 0 ]] && ps=on
+
+for w in "$NET"/*/wireless; do
+  [[ -d "$w" ]] || continue
+  i="${w%/wireless}"; i="${i##*/}"
+  iw dev "$i" set power_save "$ps" 2>/dev/null || true   # интерфейс не в режиме station — не наше дело
+done
+exit 0

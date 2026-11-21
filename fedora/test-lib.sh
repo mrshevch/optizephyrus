@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Самопроверка lib.sh без root:  bash test-lib.sh
+# Самопроверка lib.sh и g14-wifi-powersave без root:  bash test-lib.sh
 set -euo pipefail
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 DRY=0
@@ -32,5 +32,22 @@ n=$CHANGES; pkgs bash >/dev/null
 [[ $CHANGES -eq $n ]]                                     || fail "pkgs ставит уже установленный пакет"
 out="$(pkgs --allowerasing bash no-such-pkg-xyz)"
 [[ $out == "+ dnf -y install --allowerasing no-such-pkg-xyz" ]] || fail "pkgs должен ставить только недостающие: $out"
+
+# --- g14-wifi-powersave: заглушка iw пишет свои аргументы в лог ---
+H="$(dirname "${BASH_SOURCE[0]}")/g14-wifi-powersave"
+mkdir -p "$T/iwbin" "$T/net/wlx/wireless" "$T/net/eth0"
+printf '#!/bin/sh\necho "$*" >> "%s/iw.log"\n' "$T" > "$T/iwbin/iw"; chmod +x "$T/iwbin/iw"
+wps() { rm -f "$T/iw.log"; G14_AC_ONLINE="$T/ac" G14_NET="$T/net" PATH="$T/iwbin:$PATH" bash "$H"; }
+
+echo 0 > "$T/ac"; wps
+[[ "$(cat "$T/iw.log")" == "dev wlx set power_save on" ]]   || fail "на батарее power save не включён"
+echo 1 > "$T/ac"; wps
+[[ "$(cat "$T/iw.log")" == "dev wlx set power_save off" ]]  || fail "от сети power save не выключен"
+rm "$T/ac"; wps
+[[ "$(cat "$T/iw.log")" == "dev wlx set power_save off" ]]  || fail "без AC0 должно быть как от сети"
+rm -r "$T/net/wlx"; echo 0 > "$T/ac"; wps
+[[ ! -e "$T/iw.log" ]]                                       || fail "iw вызван без Wi-Fi-интерфейсов"
+mkdir -p "$T/net/wlx/wireless"; printf '#!/bin/sh\nexit 1\n' > "$T/iwbin/iw"
+wps                                                          || fail "ошибка iw уронила помощник"
 
 echo "OK: lib.sh"
