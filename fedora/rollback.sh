@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Откат всех запусков optimize.sh и gaming.sh:  sudo bash rollback.sh
 # Бэкапы обходятся от новых к старым, поэтому в итоге восстанавливается состояние до первого запуска.
-# Пакеты (кодеки, RPM Fusion, scx, asusctl, gamemode.i686, mangohud, gamescope) не удаляются — при необходимости вручную.
+# Поставленные скриптами пакеты (кодеки, RPM Fusion, scx, asusctl, gamemode.i686, mangohud, gamescope) не удаляются — при необходимости вручную.
+# Удалённые скриптами пакеты (--lean, --no-calendar) ставятся обратно.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "Запустите через sudo"; exit 1; }
 
@@ -27,7 +28,9 @@ for (( i=${#BKS[@]}-1; i>=0; i-- )); do   # от новых к старым
 
   if [[ -f "$BK/disabled-services.txt" ]]; then
     while read -r s; do
-      [[ -n "$s" ]] && systemctl enable "$s.service" || true
+      [[ -n "$s" ]] || continue
+      [[ $s == *.* ]] || s+=.service   # старые бэкапы хранят имя службы без суффикса
+      systemctl enable "$s" || true
     done < "$BK/disabled-services.txt"
   fi
 
@@ -35,6 +38,17 @@ for (( i=${#BKS[@]}-1; i>=0; i-- )); do   # от новых к старым
     while read -r r; do
       [[ -n "$r" ]] && dnf config-manager setopt "$r.enabled=1" || true
     done < "$BK/disabled-repos.txt"
+  fi
+
+  if [[ -s "$BK/removed-packages.txt" ]]; then
+    mapfile -t P < "$BK/removed-packages.txt"
+    dnf -y install "${P[@]}" || echo "!! Не удалось поставить обратно: ${P[*]} — нет сети? Повторите: sudo dnf install ${P[*]}"
+  fi
+
+  if [[ -f "$BK/masked-user-units.txt" ]]; then
+    while read -r u; do
+      [[ -n "$u" ]] && systemctl --global unmask "$u" || true
+    done < "$BK/masked-user-units.txt"
   fi
 
   if [[ -f "$BK/enabled-scx" ]]; then

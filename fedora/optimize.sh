@@ -6,18 +6,22 @@
 # Запуск:   sudo bash optimize.sh            — базовый набор (безопасный, обратимый)
 #           sudo bash optimize.sh --asus     — плюс asusctl (COPR lukenukem/asus-linux)
 #           sudo bash optimize.sh --scx      — плюс планировщик scx_lavd (COPR bieszczaders/kernel-cachyos-addons)
+#           sudo bash optimize.sh --lean     — плюс без gnome-software, dnf-makecache.timer и индексатора файлов
+#           sudo bash optimize.sh --no-calendar — плюс без Календаря, Контактов и evolution-data-server
 #           sudo bash optimize.sh --dry-run  — только показать, что будет сделано
 # Флаги можно комбинировать и добавлять повторным запуском: sudo bash optimize.sh --scx --asus
 # Повторный запуск выполняет только то, что ещё не применено; уже применённое помечается «✓».
 # Откат:    sudo bash rollback.sh
 set -euo pipefail
 
-DRY=0; ASUS=0; SCX=0
+DRY=0; ASUS=0; SCX=0; LEAN=0; NOCAL=0
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY=1 ;;
     --asus)    ASUS=1 ;;
     --scx)     SCX=1 ;;
+    --lean)    LEAN=1 ;;
+    --no-calendar) NOCAL=1 ;;
     *) echo "Неизвестный флаг: $a"; exit 1 ;;
   esac
 done
@@ -269,8 +273,34 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+if [[ $LEAN -eq 1 ]]; then
+  log "12. --lean: без фоновых обновлений и индексатора файлов"
+  # gnome-software весь сеанс держит ~245 МБ (+ dnf5daemon-server ~126 МБ) и сам качает обновления.
+  # Выключить автозапуск, не сломав окно приложения, нельзя: сеанс и меню поднимают одну user-службу
+  unpkgs gnome-software gnome-software-fedora-langpacks
+  if systemctl is-enabled -q dnf-makecache.timer; then
+    [[ $DRY -eq 1 ]] || echo dnf-makecache.timer >> "$BK/disabled-services.txt"
+    run systemctl disable --now dnf-makecache.timer
+  else
+    ok "dnf-makecache.timer выключен"
+  fi
+  mask_user localsearch-3.service   # индексатор файлов; Nautilus без него ищет по имени
+  if [[ $CHANGED -eq 1 ]]; then REBOOT=1; fi   # запущенные экземпляры живут до выхода из сеанса
+fi
+
+# ---------------------------------------------------------------------------
+if [[ $NOCAL -eq 1 ]]; then
+  log "13. --no-calendar: без календаря и контактов"
+  unpkgs gnome-calendar gnome-contacts
+  # Серверы данных календаря и контактов (evolution-data-server); GNOME Online Accounts не трогаем
+  mask_user evolution-alarm-notify.service evolution-source-registry.service \
+            evolution-calendar-factory.service evolution-addressbook-factory.service
+  if [[ $CHANGED -eq 1 ]]; then REBOOT=1; fi
+fi
+
+# ---------------------------------------------------------------------------
 summary
-if [[ $REBOOT -eq 1 ]]; then echo "Перезагрузитесь, чтобы применились zram и nowatchdog."; fi
+if [[ $REBOOT -eq 1 ]]; then echo "Перезагрузитесь: zram, параметры ядра и службы GNOME применяются при загрузке и входе."; fi
 echo "Проверка (zram и nowatchdog — после перезагрузки):"
 echo "  zramctl                                  # ALGORITHM zstd"
 echo "  vainfo --display drm --device /dev/dri/by-path/pci-0000:07:00.0-render | grep -E 'H264|HEVC'"
@@ -279,3 +309,7 @@ echo "  grep ^performance= /etc/tuned/ppd.conf   # performance=g14-performance"
 echo "  cat /proc/sys/kernel/watchdog            # 0"
 if [[ $SCX -eq 1 ]]; then echo "  cat /sys/kernel/sched_ext/root/ops       # lavd"; fi
 echo "  iw dev wlp5s0 get power_save             # on от батареи, off от сети"
+if [[ $LEAN -eq 1 ]]; then
+  echo "  rpm -q gnome-software                    # не установлен"
+  echo "  systemctl --global is-enabled localsearch-3.service   # masked"
+fi

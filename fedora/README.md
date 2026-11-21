@@ -36,6 +36,8 @@ sudo reboot
 | *(none)* | Base set, sections 1–8 and 11 |
 | `--scx` | Also installs the `scx_lavd` scheduler (section 9) |
 | `--asus` | Also installs `asusctl` (section 10) |
+| `--lean` | Also removes GNOME Software, disables `dnf-makecache.timer` and the file indexer (section 12) |
+| `--no-calendar` | Also removes GNOME Calendar and Contacts and masks evolution-data-server (section 13) |
 | `--dry-run` | Prints every command and file it would run or write, and changes nothing |
 
 You can combine the flags. You can also add one later by running the script again, for example `sudo bash optimize.sh --scx --asus`.
@@ -151,6 +153,28 @@ These are disabled and stopped, but only if they are enabled:
 - **Takes effect:** immediately.
 - **Limit:** online games on battery also run with power save on, so ping can spike. Plug in the charger for online games.
 
+### 12. `--lean`: no background updates, no file indexer
+
+For people who update by hand and never search file contents.
+
+| What | Change | Why |
+|------|--------|-----|
+| GNOME Software | Removes `gnome-software` and `gnome-software-fedora-langpacks` | It runs for the whole session (about 245 MB RSS, plus about 126 MB for the `dnf5daemon-server` it starts) and downloads updates in the background. Its autostart cannot be turned off without breaking the app window: the session and the app menu start the same user service |
+| `dnf-makecache.timer` | Disabled | Refreshes dnf metadata in the background. `dnf upgrade --refresh` does it anyway |
+| localsearch (file indexer) | `systemctl --global mask localsearch-3.service` | Crawls and indexes your files. Without it, Nautilus searches by file name only |
+
+- **Updates from now on:** `sudo dnf upgrade --refresh` and `flatpak update`.
+- **Takes effect:** after you log in again. Processes that are already running keep running until then.
+
+### 13. `--no-calendar`: no calendar and contacts
+
+For people who do not use GNOME Calendar or Contacts on this machine.
+
+- **Removes:** `gnome-calendar`, `gnome-contacts`.
+- **Masks** (`systemctl --global mask`): `evolution-alarm-notify`, `evolution-source-registry`, `evolution-calendar-factory`, `evolution-addressbook-factory`. Together with Calendar they use about 260 MB RSS.
+- **Result:** the clock menu shows no events. GNOME Online Accounts is left alone.
+- **Takes effect:** after you log in again.
+
 ### Left out on purpose
 
 - **supergfxctl:** without it, the RX 6700S already powers off fully (runtime PM, D3cold) when nothing uses it.
@@ -233,11 +257,13 @@ Each run that changes something (not `--dry-run`) creates `/var/backups/os-tune-
 |-------|----------|
 | `<original path>` | Copy of every file that was overwritten, for example `etc/sysctl.d/...` |
 | `created-files.txt` | Every file the run wrote |
-| `disabled-services.txt` | Services the run disabled |
+| `disabled-services.txt` | Services and timers the run disabled |
 | `disabled-repos.txt` | Repos the run disabled |
 | `fstab`, `dnf.conf`, `ppd.conf` | Originals before editing |
 | `added-nowatchdog`, `added-mitigations-off`, `enabled-scx` | Markers for kernel-argument and scx changes |
 | `added-gamemode-group` | The user added to the `gamemode` group |
+| `removed-packages.txt` | Packages the run removed (`--lean`, `--no-calendar`) |
+| `masked-user-units.txt` | User units the run masked with `systemctl --global mask` |
 
 ## Rollback
 
@@ -249,7 +275,9 @@ sudo bash rollback.sh && sudo reboot
 
 - restores overwritten files and deletes files the scripts created;
 - restores `/etc/fstab`, `/etc/dnf/dnf.conf` and `/etc/tuned/ppd.conf`;
-- re-enables the services and repos the scripts disabled;
+- re-enables the services, timers and repos the scripts disabled;
+- reinstalls the packages the scripts removed (needs network);
+- unmasks the user units the scripts masked;
 - reloads udev rules, so the Wi-Fi rule stops working once its file is deleted;
 - disables `scx_loader`;
 - removes the `nowatchdog` and `mitigations=off` kernel arguments;
@@ -257,7 +285,7 @@ sudo bash rollback.sh && sudo reboot
 
 It does **not**:
 
-- uninstall packages (RPM Fusion, `mesa-va-drivers-freeworld`, `ffmpeg`, `scx-scheds`, `asusctl`, `gamemode.i686`, `mangohud`, `gamescope`) or swap `ffmpeg` back to `ffmpeg-free`;
+- uninstall packages the scripts installed (RPM Fusion, `mesa-va-drivers-freeworld`, `ffmpeg`, `scx-scheds`, `asusctl`, `gamemode.i686`, `mangohud`, `gamescope`) or swap `ffmpeg` back to `ffmpeg-free`;
 - disable the COPR repos or the `asusd` service;
 - restore journal entries that the vacuum deleted;
 - delete the backup directories.
@@ -273,6 +301,9 @@ findmnt -no OPTIONS /                    # contains noatime
 cat /sys/kernel/sched_ext/root/ops       # lavd (with --scx)
 grep ^performance= /etc/tuned/ppd.conf   # performance=g14-performance
 iw dev wlp5s0 get power_save             # on on battery, off on AC
+rpm -q gnome-software                    # not installed (--lean)
+systemctl --global is-enabled localsearch-3.service   # masked (--lean)
+pgrep -l 'evolution|gnome-calendar'      # nothing (--no-calendar)
 sysctl vm.compaction_proactiveness       # 0 (gaming.sh)
 
 # while a game runs with gamemoderun:
